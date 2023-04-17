@@ -1,0 +1,74 @@
+version: "3.7"
+
+networks:
+  backend:
+    driver: bridge
+
+services:
+  # image project
+  backend-laravel:
+    build:
+      context: ./.docker/bin/development/php
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    working_dir: /var/www/
+    volumes:
+      - ./packages/:/var/www
+    depends_on:
+      - redis
+    networks:
+      - backend
+
+  # nginx
+  nginx:
+    image: nginx:alpine
+    # build:
+    #   context: ./.docker/bin/development/nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_PORT}:80"
+    volumes:
+      - ./packages/:/var/www
+      - ./.docker/bin/development/nginx/:/etc/nginx/conf.d/
+      - ./.docker/logs/development/nginx/logs:/var/log/nginx/
+    networks:
+      - backend
+
+  # db mysql
+  db:
+    image: mysql:5.7.22
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+    volumes:
+      - ./.docker/data/development/mysql/dbdata:/var/lib/mysql
+    ports:
+      - "${DB_PORT}:3306"
+    networks:
+      - backend
+
+  # queue
+  queue:
+    image: especializati/laravel9-app
+    restart: unless-stopped
+    command: "php artisan queue:work"
+    volumes:
+      - ./packages/backend-laravel:/var/www
+    depends_on:
+      - redis
+      - backend-laravel
+    networks:
+      - backend
+
+  # redis
+  redis:
+    image: redis:latest
+    ports:
+      - "${REDIS_PORT}:6379"
+    volumes:
+      - ./.docker/data/development/redis/:/data
+    networks:
+      - backend
